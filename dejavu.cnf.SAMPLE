@@ -1,9 +1,6 @@
 {
     "database": {
-        "host": "127.0.0.1",
-        "user": "root",
-        "password": "rootpass",
-        "database": "dejavu"
+        "host": "192.168.1.208"
     },
-    "database_type": "mysql"
+    "database_type": "clickhouse"
 }

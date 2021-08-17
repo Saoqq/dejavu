@@ -90,7 +90,7 @@ def get_2D_peaks(arr2D: np.array, plot: bool = False, amp_min: int = DEFAULT_AMP
     eroded_background = binary_erosion(background, structure=neighborhood, border_value=1)
 
     # Boolean mask of arr2D with True at peaks (applying XOR on both matrices).
-    detected_peaks = local_max != eroded_background
+    detected_peaks = local_max ^ eroded_background
 
     # extract peaks
     amps = arr2D[detected_peaks]

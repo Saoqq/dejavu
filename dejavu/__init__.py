@@ -15,6 +15,7 @@ from dejavu.config.settings import (DEFAULT_FS, DEFAULT_OVERLAP_RATIO,
                                     FINGERPRINTED_HASHES, HASHES_MATCHED,
                                     INPUT_CONFIDENCE, INPUT_HASHES, OFFSET,
                                     OFFSET_SECS, SONG_ID, SONG_NAME, TOPN)
+from dejavu.database_handler.clickhouse_database import NotSupportedException
 from dejavu.logic.fingerprint import fingerprint
 
 
@@ -44,7 +45,7 @@ class Dejavu:
         self.songs = self.db.get_songs()
         self.songhashes_set = set()  # to know which ones we've computed before
         for song in self.songs:
-            song_hash = song[FIELD_FILE_SHA1]
+            song_hash = song[2]
             self.songhashes_set.add(song_hash)
 
     def get_fingerprinted_songs(self) -> List[Dict[str, any]]:
@@ -63,7 +64,7 @@ class Dejavu:
         """
         self.db.delete_songs_by_id(song_ids)
 
-    def fingerprint_directory(self, path: str, extensions: str, nprocesses: int = None) -> None:
+    def fingerprint_directory(self, path: str, extensions: List[str], nprocesses: int = None) -> None:
         """
         Given a directory and a set of extensions it fingerprints all files that match each extension specified.
 
@@ -112,7 +113,10 @@ class Dejavu:
                 sid = self.db.insert_song(song_name, file_hash, len(hashes))
 
                 self.db.insert_hashes(sid, hashes)
-                self.db.set_song_fingerprinted(sid)
+                try:
+                    self.db.set_song_fingerprinted(sid)
+                except NotSupportedException:
+                    pass
                 self.__load_fingerprinted_audio_hashes()
 
         pool.close()
@@ -141,7 +145,10 @@ class Dejavu:
             sid = self.db.insert_song(song_name, file_hash)
 
             self.db.insert_hashes(sid, hashes)
-            self.db.set_song_fingerprinted(sid)
+            try:
+                self.db.set_song_fingerprinted(sid)
+            except NotSupportedException:
+                pass
             self.__load_fingerprinted_audio_hashes()
 
     def generate_fingerprints(self, samples: List[int], Fs=DEFAULT_FS) -> Tuple[List[Tuple[str, int]], float]:
@@ -194,7 +201,7 @@ class Dejavu:
         )
 
         songs_result = []
-        for song_id, offset, _ in songs_matches[0:topn]:  # consider topn elements in the result
+        for song_id, offset, _ in songs_matches:  # consider topn elements in the result
             song = self.db.get_song_by_id(song_id)
 
             song_name = song.get(SONG_NAME, None)
@@ -203,15 +210,15 @@ class Dejavu:
             hashes_matched = dedup_hashes[song_id]
 
             song = {
-                SONG_ID: song_id,
-                SONG_NAME: song_name.encode("utf8"),
+                SONG_ID: str(song_id),
+                SONG_NAME: song_name,
                 INPUT_HASHES: queried_hashes,
                 FINGERPRINTED_HASHES: song_hashes,
                 HASHES_MATCHED: hashes_matched,
                 # Percentage regarding hashes matched vs hashes from the input.
-                INPUT_CONFIDENCE: round(hashes_matched / queried_hashes, 2),
+                INPUT_CONFIDENCE: round(hashes_matched / queried_hashes, 3),
                 # Percentage regarding hashes matched vs hashes fingerprinted in the db.
-                FINGERPRINTED_CONFIDENCE: round(hashes_matched / song_hashes, 2),
+                FINGERPRINTED_CONFIDENCE: round(hashes_matched / song_hashes, 3),
                 OFFSET: offset,
                 OFFSET_SECS: nseconds,
                 FIELD_FILE_SHA1: song.get(FIELD_FILE_SHA1, None).encode("utf8")
